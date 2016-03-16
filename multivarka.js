@@ -12,8 +12,8 @@ var MultivarkaConnection = function (url) {
     this.__collectionName = undefined;
     this.__query = {};
     this.__newFields = {};
-    this.__positiveCallback = () => {};
-    this.__errorCallback = () => {};
+    this.__positiveCallback = function () {};
+    this.__errorCallback = function () {};
 };
 
 /**
@@ -64,13 +64,12 @@ MultivarkaConnection.prototype.set = function (key, value) {
  * @param {function} callback - Изначальный коллбэк
  */
 MultivarkaConnection.prototype.__createCallbacks = function (callback) {
+    callback = callback || function () {};
     this.__positiveCallback = function (data) {
         callback(null, data);
     };
     this.__errorCallback = function (error) {
-        if (this.__db) {
-            this.__db.close();
-        }
+        this.__db && this.__db.close();
         callback(error);
     };
 };
@@ -125,7 +124,11 @@ MultivarkaConnection.prototype.__connect = function () {
     if (!this.__url) {
         return this.__errorCallback('Wrong URL');
     }
-    MONGO_CLIENT.connect(this.__url, this.__createCollectionObject.bind(this));
+    try {
+        MONGO_CLIENT.connect(this.__url, this.__createCollectionObject.bind(this));
+    } catch (e) {
+        return this.__errorCallback(e);
+    }
 };
 
 /**
@@ -168,7 +171,7 @@ MultivarkaConnection.prototype.__removeObjects = function (err, collection) {
     if (err) {
         return this.__errorCallback(err);
     }
-    collection.remove(this.__query, this.__returnOK.bind(this));
+    collection.remove(this.__query, this.__returnResults.bind(this));
 };
 
 
@@ -182,7 +185,7 @@ MultivarkaConnection.prototype.__updateObjects = function (err, collection) {
     if (err) {
         return this.__errorCallback(err);
     }
-    collection.updateMany(this.__query, {$set: this.__newFields}, this.__returnOK.bind(this));
+    collection.updateMany(this.__query, {$set: this.__newFields}, this.__returnResults.bind(this));
 };
 
 /**
@@ -195,7 +198,7 @@ MultivarkaConnection.prototype.__insertObject = function (err, collection) {
     if (err) {
         return this.__errorCallback(err);
     }
-    collection.insert(this.__newFields, this.__returnOK.bind(this));
+    collection.insert(this.__newFields, this.__returnResults.bind(this));
 };
 
 /**
@@ -203,7 +206,7 @@ MultivarkaConnection.prototype.__insertObject = function (err, collection) {
  * @private
  * @param {object} err - Информация об ошибке
  */
-MultivarkaConnection.prototype.__returnOK = function (err) {
+MultivarkaConnection.prototype.__returnResults = function (err) {
     if (err) {
         return this.__errorCallback(err);
     }
