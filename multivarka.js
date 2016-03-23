@@ -12,8 +12,7 @@ var MultivarkaConnection = function (url) {
     this.__collectionName = undefined;
     this.__query = {};
     this.__newFields = {};
-    this.__positiveCallback = function () {};
-    this.__errorCallback = function () {};
+    this.__callback = function () {};
 };
 
 /**
@@ -59,18 +58,14 @@ MultivarkaConnection.prototype.set = function (key, value) {
 };
 
 /**
- * Создание коллбэков для позитивного и негативного исхода
+ * Создание коллбэка, закрывающего подключение к БД
  * @private
  * @param {function} callback - Изначальный коллбэк
  */
-MultivarkaConnection.prototype.__createCallbacks = function (callback) {
+MultivarkaConnection.prototype.__createCallback = function (callback) {
     callback = callback || function () {};
-    this.__positiveCallback = function (data) {
-        callback(null, data);
-    };
-    this.__errorCallback = function (error) {
-        this.__db && this.__db.close();
-        callback(error);
+    this.__callback = function (err, data) {
+        callback(err, data);
     };
 };
 
@@ -79,8 +74,8 @@ MultivarkaConnection.prototype.__createCallbacks = function (callback) {
  * @param {function} callback - Изначальный коллбэк
  */
 MultivarkaConnection.prototype.find = function (callback) {
-    this.__createCallbacks(callback);
-    this.__neededFunction = this.__findObjects;
+    this.__createCallback(callback);
+    this.__currentOperation = this.__findObjects;
     this.__connect();
 };
 
@@ -89,8 +84,8 @@ MultivarkaConnection.prototype.find = function (callback) {
  * @param {function} callback - Изначальный коллбэк
  */
 MultivarkaConnection.prototype.remove = function (callback) {
-    this.__createCallbacks(callback);
-    this.__neededFunction = this.__removeObjects;
+    this.__createCallback(callback);
+    this.__currentOperation = this.__removeObjects;
     this.__connect();
 };
 
@@ -99,8 +94,8 @@ MultivarkaConnection.prototype.remove = function (callback) {
  * @param {function} callback - Изначальный коллбэк
  */
 MultivarkaConnection.prototype.update = function (callback) {
-    this.__createCallbacks(callback);
-    this.__neededFunction = this.__updateObjects;
+    this.__createCallback(callback);
+    this.__currentOperation = this.__updateDocuments;
     this.__connect();
 };
 
@@ -110,8 +105,8 @@ MultivarkaConnection.prototype.update = function (callback) {
  * @param {function} callback - Изначальный коллбэк
  */
 MultivarkaConnection.prototype.insert = function (document, callback) {
-    this.__createCallbacks(callback);
-    this.__neededFunction = this.__insertObject;
+    this.__createCallback(callback);
+    this.__currentOperation = this.__insertObject;
     this.__newFields = document;
     this.__connect();
 };
@@ -122,12 +117,12 @@ MultivarkaConnection.prototype.insert = function (document, callback) {
  */
 MultivarkaConnection.prototype.__connect = function () {
     if (!this.__url) {
-        return this.__errorCallback('Wrong URL');
+        return this.__callback('Wrong URL');
     }
     try {
         MONGO_CLIENT.connect(this.__url, this.__createCollectionObject.bind(this));
     } catch (e) {
-        return this.__errorCallback(e);
+        return this.__callback(e);
     }
 };
 
@@ -139,13 +134,13 @@ MultivarkaConnection.prototype.__connect = function () {
  */
 MultivarkaConnection.prototype.__createCollectionObject = function (err, db) {
     if (err) {
-        return this.__errorCallback(err);
+        return this.__callback(err);
     }
     if (!this.__collectionName) {
-        return this.__errorCallback('Wrong collection name');
+        return this.__callback('Wrong collection name');
     }
     this.__db = db;
-    db.collection(this.__collectionName, this.__neededFunction.bind(this));
+    db.collection(this.__collectionName, this.__currentOperation.bind(this));
 };
 
 /**
@@ -156,7 +151,7 @@ MultivarkaConnection.prototype.__createCollectionObject = function (err, db) {
  */
 MultivarkaConnection.prototype.__findObjects = function (err, collection) {
     if (err) {
-        return this.__errorCallback(err);
+        return this.__callback(err);
     }
     collection.find(this.__query).toArray(this.__returnResults.bind(this));
 };
@@ -169,7 +164,7 @@ MultivarkaConnection.prototype.__findObjects = function (err, collection) {
  */
 MultivarkaConnection.prototype.__removeObjects = function (err, collection) {
     if (err) {
-        return this.__errorCallback(err);
+        return this.__callback(err);
     }
     collection.remove(this.__query, this.__returnResults.bind(this));
 };
@@ -181,9 +176,9 @@ MultivarkaConnection.prototype.__removeObjects = function (err, collection) {
  * @param {object} err - Информация об ошибке
  * @param {object} collection - Подключение к коллекции
  */
-MultivarkaConnection.prototype.__updateObjects = function (err, collection) {
+MultivarkaConnection.prototype.__updateDocuments = function (err, collection) {
     if (err) {
-        return this.__errorCallback(err);
+        return this.__callback(err);
     }
     collection.updateMany(this.__query, {$set: this.__newFields}, this.__returnResults.bind(this));
 };
@@ -196,7 +191,7 @@ MultivarkaConnection.prototype.__updateObjects = function (err, collection) {
  */
 MultivarkaConnection.prototype.__insertObject = function (err, collection) {
     if (err) {
-        return this.__errorCallback(err);
+        return this.__callback(err);
     }
     collection.insert(this.__newFields, this.__returnResults.bind(this));
 };
@@ -208,10 +203,10 @@ MultivarkaConnection.prototype.__insertObject = function (err, collection) {
  */
 MultivarkaConnection.prototype.__returnResults = function (err) {
     if (err) {
-        return this.__errorCallback(err);
+        return this.__callback(err);
     }
     this.__db.close();
-    return this.__positiveCallback('OK');
+    return this.__callback(null, 'OK');
 };
 
 /**
@@ -222,10 +217,10 @@ MultivarkaConnection.prototype.__returnResults = function (err) {
  */
 MultivarkaConnection.prototype.__returnResults = function (err, data) {
     if (err) {
-        return this.__errorCallback(err);
+        return this.__callback(err);
     }
     this.__db.close();
-    return this.__positiveCallback(data);
+    return this.__callback(null, data);
 };
 
 /**
@@ -254,10 +249,28 @@ var __generateQuerySelector = function (selector, notSelector) {
     };
 };
 
-
+/**
+ * Генерация предиката равенства
+ * @param {any} value - Значение
+ */
 MultivarkaQueryPredicateMaker.prototype.equal = __generateQuerySelector('$eq', '$ne');
+
+/**
+ * Генерация предиката "больше"
+ * @param {any} value - Значение
+ */
 MultivarkaQueryPredicateMaker.prototype.greatThan = __generateQuerySelector('$gt', '$lte');
+
+/**
+ * Генерация предиката "меньше"
+ * @param {any} value - Значение
+ */
 MultivarkaQueryPredicateMaker.prototype.lessThan = __generateQuerySelector('$lt', '$gte');
+
+/**
+ * Генерация предиката включения
+ * @param {any} value - Значение
+ */
 MultivarkaQueryPredicateMaker.prototype.include = __generateQuerySelector('$in', '$nin');
 
 /**
