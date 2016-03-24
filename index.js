@@ -16,7 +16,7 @@ function insertFirst() {
     .insert(doc, function (err, data) {
         console.log('insert first ok');
         err ? console.log(err) : insertSecond();
-    }); 
+    });
 }
 
 function insertSecond() {
@@ -29,7 +29,7 @@ function insertSecond() {
     .insert(doc, function (err, data) {
         console.log('insert second ok');
         err ? console.log(err) : insertThird();
-    }); 
+    });
 }
 
 function insertThird() {
@@ -42,7 +42,7 @@ function insertThird() {
     .insert(doc, function (err, data) {
         console.log('insert third ok');
         err ? console.log(err) : showAll();
-    }); 
+    });
 }
 
 function showAll() {

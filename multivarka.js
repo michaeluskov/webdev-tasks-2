@@ -121,7 +121,8 @@ MultivarkaConnection.prototype.__connect = function () {
         return this.__callback('Wrong URL');
     }
     try {
-        MONGO_CLIENT.connect(this.__url, this.__checkIfErrorAndInvoke(this.__createCollectionObject));
+        MONGO_CLIENT.connect(this.__url,
+        this.__checkIfErrorAndInvoke(this.__createCollectionObject));
     } catch (e) {
         return this.__callback(e);
     }
@@ -151,9 +152,11 @@ MultivarkaConnection.prototype.__checkIfErrorAndInvoke = function (callback) {
         if (err) {
             return this.__callback(err);
         }
-        callback && typeof (callback)  == 'function' && callback.apply(self, [].slice.call(arguments, 1));
+        callback &&
+        typeof (callback) == 'function' &&
+        callback.apply(self, [].slice.call(arguments, 1));
     };
-}
+};
 
 /**
  * Поиск документов
