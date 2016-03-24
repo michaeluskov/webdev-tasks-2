@@ -64,9 +64,10 @@ MultivarkaConnection.prototype.set = function (key, value) {
  */
 MultivarkaConnection.prototype.__createCallback = function (callback) {
     callback = callback || function () {};
-    this.__callback = function (err, data) {
+    this.__callback = (function (err, data) {
+        this.__db && this.__db.close();
         callback(err, data);
-    };
+    }).bind(this);
 };
 
 /**
@@ -75,7 +76,7 @@ MultivarkaConnection.prototype.__createCallback = function (callback) {
  */
 MultivarkaConnection.prototype.find = function (callback) {
     this.__createCallback(callback);
-    this.__currentOperation = this.__findObjects;
+    this.__currentOperation = this.__checkIfErrorAndInvoke(this.__findObjects);
     this.__connect();
 };
 
@@ -85,7 +86,7 @@ MultivarkaConnection.prototype.find = function (callback) {
  */
 MultivarkaConnection.prototype.remove = function (callback) {
     this.__createCallback(callback);
-    this.__currentOperation = this.__removeObjects;
+    this.__currentOperation = this.__checkIfErrorAndInvoke(this.__removeObjects);
     this.__connect();
 };
 
@@ -95,7 +96,7 @@ MultivarkaConnection.prototype.remove = function (callback) {
  */
 MultivarkaConnection.prototype.update = function (callback) {
     this.__createCallback(callback);
-    this.__currentOperation = this.__updateDocuments;
+    this.__currentOperation = this.__checkIfErrorAndInvoke(this.__updateDocuments);
     this.__connect();
 };
 
@@ -106,7 +107,7 @@ MultivarkaConnection.prototype.update = function (callback) {
  */
 MultivarkaConnection.prototype.insert = function (document, callback) {
     this.__createCallback(callback);
-    this.__currentOperation = this.__insertObject;
+    this.__currentOperation = this.__checkIfErrorAndInvoke(this.__insertObject);
     this.__newFields = document;
     this.__connect();
 };
@@ -120,7 +121,7 @@ MultivarkaConnection.prototype.__connect = function () {
         return this.__callback('Wrong URL');
     }
     try {
-        MONGO_CLIENT.connect(this.__url, this.__createCollectionObject.bind(this));
+        MONGO_CLIENT.connect(this.__url, this.__checkIfErrorAndInvoke(this.__createCollectionObject));
     } catch (e) {
         return this.__callback(e);
     }
@@ -129,13 +130,9 @@ MultivarkaConnection.prototype.__connect = function () {
 /**
  * Подключение к коллекции
  * @private
- * @param {object} err - Информация об ошибке
  * @param {object} db - Подключение к БД
  */
-MultivarkaConnection.prototype.__createCollectionObject = function (err, db) {
-    if (err) {
-        return this.__callback(err);
-    }
+MultivarkaConnection.prototype.__createCollectionObject = function (db) {
     if (!this.__collectionName) {
         return this.__callback('Wrong collection name');
     }
@@ -144,28 +141,35 @@ MultivarkaConnection.prototype.__createCollectionObject = function (err, db) {
 };
 
 /**
+ * Генерация функции, проверяющей ошибку и вызывающей соответствующий коллбэк
+ * @private
+ * @param {function} callback - Коллбэк
+ */
+MultivarkaConnection.prototype.__checkIfErrorAndInvoke = function (callback) {
+    var self = this;
+    return function (err) {
+        if (err) {
+            return this.__callback(err);
+        }
+        callback && typeof (callback)  == 'function' && callback.apply(self, [].slice.call(arguments, 1));
+    };
+}
+
+/**
  * Поиск документов
  * @private
- * @param {object} err - Информация об ошибке
  * @param {object} collection - Подключение к коллекции
  */
-MultivarkaConnection.prototype.__findObjects = function (err, collection) {
-    if (err) {
-        return this.__callback(err);
-    }
+MultivarkaConnection.prototype.__findObjects = function (collection) {
     collection.find(this.__query).toArray(this.__returnResults.bind(this));
 };
 
 /**
  * Удаление документов
  * @private
- * @param {object} err - Информация об ошибке
  * @param {object} collection - Подключение к коллекции
  */
-MultivarkaConnection.prototype.__removeObjects = function (err, collection) {
-    if (err) {
-        return this.__callback(err);
-    }
+MultivarkaConnection.prototype.__removeObjects = function (collection) {
     collection.remove(this.__query, this.__returnResults.bind(this));
 };
 
@@ -173,26 +177,18 @@ MultivarkaConnection.prototype.__removeObjects = function (err, collection) {
 /**
  * Обновление документов
  * @private
- * @param {object} err - Информация об ошибке
  * @param {object} collection - Подключение к коллекции
  */
-MultivarkaConnection.prototype.__updateDocuments = function (err, collection) {
-    if (err) {
-        return this.__callback(err);
-    }
+MultivarkaConnection.prototype.__updateDocuments = function (collection) {
     collection.updateMany(this.__query, {$set: this.__newFields}, this.__returnResults.bind(this));
 };
 
 /**
  * Добавление документа
  * @private
- * @param {object} err - Информация об ошибке
  * @param {object} collection - Подключение к коллекции
  */
-MultivarkaConnection.prototype.__insertObject = function (err, collection) {
-    if (err) {
-        return this.__callback(err);
-    }
+MultivarkaConnection.prototype.__insertObject = function (collection) {
     collection.insert(this.__newFields, this.__returnResults.bind(this));
 };
 
