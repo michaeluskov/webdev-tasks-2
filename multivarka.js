@@ -150,7 +150,7 @@ MultivarkaConnection.prototype.__checkIfErrorAndInvoke = function (callback) {
     var self = this;
     return function (err) {
         if (err) {
-            return this.__callback(err);
+            return self.__callback(err);
         }
         callback &&
         typeof (callback) == 'function' &&
